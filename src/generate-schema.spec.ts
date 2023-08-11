@@ -5,12 +5,11 @@ import { createScanner, ScriptTarget } from "typescript";
 
 const tests = path.resolve('src/tests');
 
-const scanner = createScanner(ScriptTarget.ESNext, true);
 
 describe("generate-schema", () => {
 	it("should generate a schema", async () => {
 		const sourceFile = path.resolve(tests, 'files', 'main.ts');
-		const res = await generateSchema(scanner, sourceFile);
+		const res = await generateSchema(sourceFile);
 		expect(true).toBe(true)
 	})
 })

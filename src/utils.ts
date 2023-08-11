@@ -1,5 +1,6 @@
 import * as ts from "typescript";
 import { match } from "ts-pattern";
+import { factory } from "typescript";
 
 // test reasons
 // global.t = ts;
@@ -89,4 +90,50 @@ export function transformArrayLiteralExpressionToArrayLiteral(node: ts.ArrayLite
 	}
 
 	return array;
+}
+
+export function getDecorator(node: ts.PropertyDeclaration | ts.ClassDeclaration | ts.MethodDeclaration): ts.Decorator | undefined {
+	const modifiers = node.modifiers ?? [];
+	const decorator = modifiers.find((m) => ts.isDecorator(m));
+
+	return decorator as ts.Decorator | undefined;
+}
+
+export function getDecoratorName(decorator: ts.Decorator): string | undefined {
+	if (ts.isCallExpression(decorator.expression)) {
+		if (ts.isIdentifier(decorator.expression.expression)) {
+			return decorator.expression.expression.text;
+		}
+	}
+
+	return undefined;
+}
+
+export function getDecoratorArguments(decorator: ts.Decorator): ts.NodeArray<ts.Expression> {
+	if (!ts.isCallExpression(decorator.expression)) {
+		return factory.createNodeArray();
+	}
+
+	return decorator.expression.arguments;
+}
+
+
+/**
+ *
+ * @throws {Error} If the class has no name
+ */
+export function getClassName(classNode: ts.ClassDeclaration): string {
+	if (!classNode.name) {
+		throw new Error("Class has no name");
+	}
+
+	return classNode.name.text;
+}
+
+export function traverse(node: ts.Node, cb: (node: ts.Node) => void): void {
+	cb(node);
+
+	ts.forEachChild(node, (child) => {
+		traverse(child, cb);
+	});
 }
