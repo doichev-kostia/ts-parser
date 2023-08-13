@@ -130,6 +130,17 @@ export function getClassName(classNode: ts.ClassDeclaration): string {
 	return classNode.name.text;
 }
 
+/**
+ * @throws {Error} If the property has no name
+ */
+export function getPropertyName(property: ts.PropertyDeclaration): string {
+	if (!property.name) {
+		throw new Error("Property has no name");
+	}
+
+	return (property.name as ts.Identifier).text;
+}
+
 export function traverse(node: ts.Node, cb: (node: ts.Node) => void): void {
 	cb(node);
 
