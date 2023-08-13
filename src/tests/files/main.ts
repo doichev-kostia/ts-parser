@@ -5,7 +5,7 @@ export class Test {
 	@Column("varchar", { nullable: false })
 	public prop: string;
 
-	@Column("array")
+	@Column("int", { array: true })
 	public num: number[];
 
 	public f() {

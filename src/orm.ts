@@ -9,6 +9,7 @@ import {
 	transformObjectExpressionToObjectLiteral,
 } from "./utils.js";
 import { match } from "ts-pattern";
+import { z } from "zod";
 
 /**
  * Column types used for @PrimaryGeneratedColumn() decorator.
@@ -248,6 +249,17 @@ const ColumnTypeMapper2: Record<
 	boolean: ["bool", "boolean"],
 };
 
+const exceptions = [
+	"json",
+	"jsonb",
+	"enum",
+	"set",
+	"array",
+	"simple-array",
+	"simple-json",
+	"simple-enum",
+];
+
 // const ColumnTypeMapper: Record<
 // 	| WithPrecisionColumnType
 // 	| WithLengthColumnType
@@ -305,6 +317,11 @@ const NodeKindTypeMapper: Record<number, string> = {
 	[ts.SyntaxKind.ObjectKeyword]: "object",
 	[ts.SyntaxKind.SymbolKeyword]: "symbol",
 };
+
+const ColumnTypeModifiersSchema = z.object({
+	nullable: z.boolean().optional(),
+	array: z.boolean().optional(),
+});
 
 // if the type is json, jsonb, or simple-json, we need to infer the type from the property
 // if the type is array, we need to infer the type from the property
@@ -431,16 +448,30 @@ export function getColumnType(node: ts.Node): ts.TypeNode | undefined {
 		return node.type;
 	}
 
-	if (ts.isStringLiteral(args[0])) {
-		return transformTypeOrmType(args[0].text);
+	const arg = args[0];
+
+	if (ts.isStringLiteral(arg) && !exceptions.includes(arg.text)) {
+		let type = transformTypeOrmType(arg.text);
+
+		if (ts.isObjectLiteralExpression(args[1])) {
+			const validation = ColumnTypeModifiersSchema.safeParse(
+				transformObjectExpressionToObjectLiteral(args[1]),
+			);
+			if (validation.success) {
+				type = applyColumnOptions(type, validation.data);
+			}
+		}
+
+		return type;
 	}
 
-	if (ts.isObjectLiteralExpression(args[0])) {
-		const properties = transformObjectExpressionToObjectLiteral(args[0]);
+	if (ts.isObjectLiteralExpression(arg)) {
+		const properties = transformObjectExpressionToObjectLiteral(arg);
 		if (
 			"type" in properties &&
 			typeof properties.type === "string" &&
-			properties.type.length > 0
+			properties.type.length > 0 &&
+			!exceptions.includes(properties.type)
 		) {
 			return transformTypeOrmType(properties.type);
 		} else {
@@ -480,4 +511,22 @@ function transformTypeOrmType(type: string): ts.TypeNode {
 		.otherwise(() => {
 			return factory.createKeywordTypeNode(ts.SyntaxKind.AnyKeyword);
 		});
+}
+
+function applyColumnOptions(
+	node: ts.TypeNode,
+	options: z.infer<typeof ColumnTypeModifiersSchema>,
+) {
+	if (options.array) {
+		node = factory.createArrayTypeNode(node);
+	}
+
+	if (options.nullable) {
+		node = factory.createUnionTypeNode([
+			node,
+			factory.createLiteralTypeNode(factory.createNull()),
+		]);
+	}
+
+	return node;
 }
