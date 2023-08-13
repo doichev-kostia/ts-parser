@@ -1,15 +1,20 @@
 import * as ts from "typescript";
-import { factory } from "typescript";
+import { EmitHint, factory } from "typescript";
 import {
+	camelCase,
 	getClassName,
 	getDecorator,
 	getDecoratorArguments,
 	getDecoratorName,
 	getPropertyName,
+	snakeCase,
 	transformObjectExpressionToObjectLiteral,
+	traverse,
 } from "./utils.js";
 import { match } from "ts-pattern";
 import { z } from "zod";
+
+const printer = ts.createPrinter();
 
 /**
  * Column types used for @PrimaryGeneratedColumn() decorator.
@@ -341,7 +346,7 @@ export function getEntityNameFromDecorator(
 	const args = getDecoratorArguments(decorator);
 
 	if (args.length === 0) {
-		return getClassName(classNode);
+		return snakeCase(getClassName(classNode));
 	}
 
 	const arg = args[0];
@@ -359,11 +364,11 @@ export function getEntityNameFromDecorator(
 		) {
 			return properties.name;
 		} else {
-			return getClassName(classNode);
+			return snakeCase(getClassName(classNode));
 		}
 	}
 
-	return getClassName(classNode);
+	return snakeCase(getClassName(classNode));
 }
 
 export function getColumnNameFromDecorator(
@@ -393,8 +398,10 @@ export function getColumnNameFromDecorator(
 		}
 	}
 
-	if (ts.isObjectLiteralExpression(args[1])) {
-		const properties = transformObjectExpressionToObjectLiteral(args[1]);
+	const options = args[1];
+
+	if (options && ts.isObjectLiteralExpression(options)) {
+		const properties = transformObjectExpressionToObjectLiteral(options);
 		if (
 			"name" in properties &&
 			typeof properties.name === "string" &&
@@ -453,7 +460,7 @@ export function getColumnType(node: ts.Node): ts.TypeNode | undefined {
 	if (ts.isStringLiteral(arg) && !exceptions.includes(arg.text)) {
 		let type = transformTypeOrmType(arg.text);
 
-		if (ts.isObjectLiteralExpression(args[1])) {
+		if (args[1] && ts.isObjectLiteralExpression(args[1])) {
 			const validation = ColumnTypeModifiersSchema.safeParse(
 				transformObjectExpressionToObjectLiteral(args[1]),
 			);
@@ -473,7 +480,12 @@ export function getColumnType(node: ts.Node): ts.TypeNode | undefined {
 			properties.type.length > 0 &&
 			!exceptions.includes(properties.type)
 		) {
-			return transformTypeOrmType(properties.type);
+			let type = transformTypeOrmType(properties.type);
+			const validation = ColumnTypeModifiersSchema.safeParse(properties);
+			if (validation.success) {
+				type = applyColumnOptions(type, validation.data);
+			}
+			return type;
 		} else {
 			return node.type;
 		}
@@ -529,4 +541,88 @@ function applyColumnOptions(
 	}
 
 	return node;
+}
+
+export function createEntityInterface(
+	sourceFile: ts.SourceFile,
+): ts.InterfaceDeclaration | null {
+	try {
+		let hasEntity = false;
+		sourceFile.forEachChild((node) => {
+			if (ts.isClassDeclaration(node)) {
+				const decorator = getDecorator(node);
+
+				if (!decorator) return;
+
+				if (!isEntityDecorator(decorator)) return;
+
+				hasEntity = true;
+			}
+		});
+
+		if (!hasEntity) return null;
+
+		let interfaceDeclaration: ts.InterfaceDeclaration | null = null;
+		traverse(sourceFile, function traverseNodes(node: ts.Node):
+			| ts.Node
+			| undefined {
+			if (ts.isClassDeclaration(node)) {
+				const decorator = getDecorator(node);
+
+				if (!decorator) return node;
+
+				if (!isEntityDecorator(decorator)) return node;
+
+				const entityName = getEntityNameFromDecorator(decorator, node);
+				const camelCaseName = camelCase(`${entityName}_table`);
+				const interfaceName = `${camelCaseName[0].toUpperCase()}${camelCaseName.slice(
+					1,
+				)}`;
+
+				const properties = node.members
+					.filter(ts.isPropertyDeclaration)
+					.map((property) => {
+						const columnName = getColumnName(property);
+						const columnType = getColumnType(property);
+
+						if (!columnName || !columnType) return null;
+
+						return factory.createPropertySignature(
+							undefined,
+							columnName,
+							undefined,
+							columnType,
+						);
+					})
+					.filter((property): property is ts.PropertySignature =>
+						Boolean(property),
+					);
+
+				if (properties.length === 0)
+					throw new Error("No columns found");
+
+				interfaceDeclaration = factory.createInterfaceDeclaration(
+					undefined,
+					factory.createIdentifier(interfaceName),
+					undefined,
+					undefined,
+					properties,
+				);
+			}
+		});
+
+		if (interfaceDeclaration) {
+			console.log(
+				printer.printNode(
+					EmitHint.Unspecified,
+					interfaceDeclaration,
+					ts.createSourceFile("", "", ts.ScriptTarget.Latest),
+				),
+			);
+		}
+		return interfaceDeclaration;
+	} catch (error) {
+		console.error(error);
+		return null;
+	}
 }

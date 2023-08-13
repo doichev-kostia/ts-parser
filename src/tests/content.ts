@@ -170,3 +170,104 @@ export class Test {
 		},
 	};
 })();
+
+export const nonRelationalEntities = (() => {
+	const noEntity = `
+export class Test {
+	@Column()
+	public prop: string;
+}
+`;
+
+	const entityWithoutColumns = `
+@Entity()
+export class Test {
+	public prop: string;
+}
+`;
+
+	const entityWithColumns = `
+@Entity('my_entity')
+export class Test {
+	@Column()
+	public prop: string;
+	
+	public prop2: number;
+	
+	@Column("boolean")
+	public prop3: boolean;
+	
+	@Column({ type: "varchar", length: 255 })
+	public prop4: string;
+	
+	@Column({ type: "varchar", length: 255, nullable: true })
+	public prop5: string | null;
+	
+	@Column({ type: "varchar", length: 255, array: true })
+	public prop6: string[];	
+}
+`;
+
+	return {
+		noEntity: {
+			code: noEntity,
+			interface: null,
+		},
+		entityWithoutColumns: {
+			code: entityWithoutColumns,
+			interface: null,
+		},
+		entityWithColumns: {
+			code: entityWithColumns,
+			interface: factory.createInterfaceDeclaration(
+				undefined,
+				factory.createIdentifier("MyEntityTable"),
+				undefined,
+				undefined,
+				[
+					factory.createPropertySignature(
+						undefined,
+						factory.createIdentifier("prop"),
+						undefined,
+						factory.createKeywordTypeNode(SyntaxKind.StringKeyword),
+					),
+					factory.createPropertySignature(
+						undefined,
+						factory.createIdentifier("prop3"),
+						undefined,
+						factory.createKeywordTypeNode(
+							SyntaxKind.BooleanKeyword,
+						),
+					),
+					factory.createPropertySignature(
+						undefined,
+						factory.createIdentifier("prop4"),
+						undefined,
+						factory.createKeywordTypeNode(SyntaxKind.StringKeyword),
+					),
+					factory.createPropertySignature(
+						undefined,
+						factory.createIdentifier("prop5"),
+						undefined,
+						factory.createUnionTypeNode([
+							factory.createKeywordTypeNode(
+								SyntaxKind.StringKeyword,
+							),
+							factory.createLiteralTypeNode(factory.createNull()),
+						]),
+					),
+					factory.createPropertySignature(
+						undefined,
+						factory.createIdentifier("prop6"),
+						undefined,
+						factory.createArrayTypeNode(
+							factory.createKeywordTypeNode(
+								SyntaxKind.StringKeyword,
+							),
+						),
+					),
+				],
+			),
+		},
+	};
+})();

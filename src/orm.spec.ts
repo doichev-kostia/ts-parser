@@ -2,9 +2,20 @@ import { describe, expect, it } from "vitest";
 import path from "node:path";
 import { randomUUID } from "crypto";
 import * as ts from "typescript";
-import { compareTypeNodes, traverse } from "./utils.js";
-import { getColumnName, getColumnType, getEntityName } from "./orm.js";
-import { columnNames, columnTypes, entityNames } from "./tests/content.js";
+import { compareInterfaces, compareTypeNodes, traverse } from "./utils.js";
+import {
+	createEntityInterface,
+	getColumnName,
+	getColumnType,
+	getEntityName,
+} from "./orm.js";
+import {
+	columnNames,
+	columnTypes,
+	entityNames,
+	nonRelationalEntities,
+} from "./tests/content.js";
+import assert from "node:assert";
 
 const files = path.resolve("src/tests/files");
 
@@ -187,6 +198,45 @@ describe("orm", () => {
 			expect(compareColumnTypes(result, columnTypes.options.types)).toBe(
 				true,
 			);
+		});
+	});
+
+	describe("createEntityInterface", () => {
+		it("should not create an interface as there is no entity", () => {
+			const sourceCode = getAST(nonRelationalEntities.noEntity.code);
+
+			const result = createEntityInterface(sourceCode);
+
+			expect(result).toBe(nonRelationalEntities.noEntity.interface);
+		});
+
+		it("should not create an interface as there are no columns", () => {
+			const sourceCode = getAST(
+				nonRelationalEntities.entityWithoutColumns.code,
+			);
+
+			const result = createEntityInterface(sourceCode);
+
+			expect(result).toBe(
+				nonRelationalEntities.entityWithoutColumns.interface,
+			);
+		});
+
+		it("should create an interface", () => {
+			const sourceCode = getAST(
+				nonRelationalEntities.entityWithColumns.code,
+			);
+
+			const result = createEntityInterface(sourceCode);
+
+			assert(result, "result should be defined");
+
+			expect(
+				compareInterfaces(
+					result,
+					nonRelationalEntities.entityWithColumns.interface,
+				),
+			).toBe(true);
 		});
 	});
 });

@@ -2,6 +2,7 @@ import * as ts from "typescript";
 import {
 	BooleanLiteral,
 	factory,
+	Identifier,
 	LiteralTypeNode,
 	NullLiteral,
 } from "typescript";
@@ -225,4 +226,61 @@ function isPrimitiveLiteral(
 	literal: LiteralTypeNode["literal"],
 ): literal is NullLiteral | BooleanLiteral {
 	return isNullLiteral(literal) || isBooleanLiteral(literal);
+}
+
+export function compareInterfaces(
+	i1: ts.InterfaceDeclaration,
+	i2: ts.InterfaceDeclaration,
+) {
+	if (i1.members.length !== i2.members.length) {
+		return false;
+	}
+
+	for (let i = 0; i < i1.members.length; i++) {
+		const member1 = i1.members[i];
+		const member2 = i2.members[i];
+
+		if (
+			!ts.isPropertySignature(member1) ||
+			!ts.isPropertySignature(member2)
+		) {
+			return false;
+		}
+
+		if (
+			(member1.name as Identifier).text !==
+			(member2.name as Identifier).text
+		) {
+			return false;
+		}
+
+		const typeNodesDefined = member1.type && member2.type;
+
+		if (
+			!typeNodesDefined ||
+			!compareTypeNodes(member1.type, member2.type)
+		) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+export function snakeCase(str: string) {
+	return (
+		str
+			// ABc -> a_bc
+			.replace(/([A-Z])([A-Z])([a-z])/g, "$1_$2$3")
+			// aC -> a_c
+			.replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+			.toLowerCase()
+	);
+}
+
+export function camelCase(str: string) {
+	return str.replace(/^([A-Z])|[\s-_](\w)/g, function (match, p1, p2) {
+		if (p2) return p2.toUpperCase();
+		return p1.toLowerCase();
+	});
 }
